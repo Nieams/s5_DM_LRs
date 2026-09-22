@@ -1,2 +1,2 @@
-# s5_DM_LR1
-Kraskal + dfs + bfs
+# LRs for DM s5
+LR1: Kraskal + dfs + bfs
