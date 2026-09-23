@@ -8,6 +8,6 @@ def DFS(visited, vertex):
     return visited
 
 
-print(f"Путь, полученный алгоритмом BFS: {[v+1 for v in DFS([0], 0)]}")        
+print(f"Путь, полученный алгоритмом DFS: {[v+1 for v in DFS([0], 0)]}")        
             
     
