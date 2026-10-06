@@ -3,36 +3,23 @@ def DFS(visited, vertex):
     for v in neor_graph[vertex]:
         if v not in visited:
             visited.append(v)
-            # visited = DFS(visited, v)
             DFS(visited, v)
     return visited
-
-print(f"Путь, полученный алгоритмом DFS: {[v+1 for v in DFS([0], 0)]}")
   
 def BFS(v0):
     neor_graph = [[1, 5, 8], [0, 2, 6], [1, 3, 5, 7], [2, 4], [3, 7, 10], [0, 2, 6, 9], [1, 5, 7, 10], [2, 4, 6, 9], [0, 9], [5, 7, 8, 10], [4, 9, 6]]
+    visited = [v0]
+    queue = [v0]
     
-    visited = [v0]  # Сюда записываем вершины в порядке их посещения
-    queue = [v0]    # Наша очередь (обычный список)
-    
-    # Пока в очереди есть хотя бы одна вершина
     while len(queue) > 0:
-        # Извлекаем САМЫЙ ПЕРВЫЙ элемент из списка (индекс 0)
         current = queue.pop(0)
-        
-        # Проверяем всех соседей текущей вершины
         for neighbor in neor_graph[current]:
             if neighbor not in visited:
-                visited.append(neighbor)  # Посещаем соседа
-                queue.append(neighbor)    # Добавляем в конец очереди
-                
+                visited.append(neighbor)
+                queue.append(neighbor)
     return visited
 
-# Запуск
-print(f'BFS: {[v+1 for v in BFS(0)]}')
-
-# Исходный список ребер вашего графа в формате: (вес, вершина_1, вершина_2)
-# Всего 18 рёбер
+# Исходный список ребер (вес, вершина_1, вершина_2)
 graph_edges = [
     (6, 0, 1), (3, 1, 2), (7, 2, 3), (2, 3, 4), (4, 0, 5),
     (5, 5, 2), (2, 1, 6), (2, 2, 7), (4, 5, 6), (5, 6, 7),
@@ -40,10 +27,9 @@ graph_edges = [
     (3, 5, 9), (1, 9, 7), (4, 6, 10)
 ]
 
-num_vertices = 11  # Вершины от 0 до 10
+num_vertices = 11
 
 def has_path(u, v, mst_adj, visited):
-    """Обычный DFS. Проверяет, есть ли уже путь между u и v в строящемся дереве"""
     if u == v:
         return True
     visited.append(u)
@@ -54,20 +40,13 @@ def has_path(u, v, mst_adj, visited):
     return False
 
 def kruskal(edges, n_vertices):
-    # 1. Сортируем все рёбра графа по возрастанию веса
     edges.sort()
-    
-    # Создаем пустой список смежности для будущего минимального остова (дерева)
     mst_adj = [[] for _ in range(n_vertices)]
+    mst_edges = []
+    total_weight = 0
     
-    mst_edges = []     # Здесь сохраним рёбра, вошедшие в ответ
-    total_weight = 0   # Суммарный вес минимального остова
-    
-    # 2. Перебираем отсортированные рёбра
     for weight, u, v in edges:
-        # С помощью DFS проверяем: связаны ли уже вершины u и v?
         if not has_path(u, v, mst_adj, []):
-            # Если пути между ними нет — ребро НЕ создаст цикл. Добавляем его!
             mst_adj[u].append(v)
             mst_adj[v].append(u)
             mst_edges.append((u, v, weight))
@@ -75,25 +54,35 @@ def kruskal(edges, n_vertices):
             
     return mst_edges, total_weight
 
-# Запуск алгоритма
+#ВЫВОД РЕЗУЛЬТАТОВ 
+
+print("=" * 70)
+print(" РЕЗУЛЬТАТЫ ОБХОДА ГРАФА РАЗЛИЧНЫМИ МЕТОДАМИ")
+print("=" * 70)
+
+# 1. Вывод для DFS
+dfs_route = [v + 1 for v in DFS([0], 0)]
+# Соединяем вершины стрелочками: '1 -> 2 -> 3...'
+dfs_formatted = " -> ".join(map(str, dfs_route))
+print("1. Последовательность посещения точек при поиске «в глубину» (DFS):")
+print(f"   {dfs_formatted}")
+print("-" * 70)
+
+# 2. Вывод для BFS
+bfs_route = [v + 1 for v in BFS(0)]
+bfs_formatted = " -> ".join(map(str, bfs_route))
+print("2. Последовательность посещения точек при поиске «в ширину» (BFS):")
+print(f"   {bfs_formatted}")
+print("-" * 70)
+
+# 3. Вывод для Алгоритма Краскала
 final_mst, total_w = kruskal(graph_edges, num_vertices)
+print("3. Минимальное остовное дерево:")
+print("   Выбранные линии связи между точками:")
 
-# Вывод результатов
-print("Рёбра, вошедшие в минимальное остовное дерево (МСТ):")
 for u, v, w in final_mst:
-    print(f"Ребро {u} - {v} с весом {w}")
+    # Делаем красивую строчку с выравниванием, прибавляя 1 к вершинам
+    print(f"   • Соединяем точку {u+1:<2} и точку {v+1:<2} (стоимость/вес линии: {w})")
 
-print(f"\nМинимальный суммарный вес дерева: {total_w}")
-
-            
-        
-        
-    
-
-    
-        
-    
-       
-       
-            
-    
+print(f"\n   -> Общая минимальная стоимость всей получившейся сети: {total_w}")
+print("=" * 70)
