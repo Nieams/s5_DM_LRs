@@ -163,22 +163,28 @@ def process_text(filename):
         "text": text
     }
 
-def cross_encode_and_analyze(text, foreign_codes, code_name, original_name):
-    """Кодирует текст 'чужими' кодами."""
+def cross_encode_and_analyze(text, foreign_codes, native_avg_len, filename_to_save):
+    """Кодирует текст 'чужими' кодами и сохраняет результат в файл."""
     encoded = ""
     missing_chars = set()
+    encoded_chars_count = 0 # Считаем, сколько символов реально закодировали
     
     for char in text:
         if char in foreign_codes:
             encoded += foreign_codes[char]
+            encoded_chars_count += 1
         else:
-            # Если символа нет в чужом алфавите, мы не можем его закодировать.
-            # Для чистоты эксперимента пропускаем или заменяем, но в задании подразумевается, 
-            # что алфавиты могут не совпадать.
             missing_chars.add(char)
-            pass 
             
-    return len(encoded), missing_chars
+    # Сохраняем файл
+    with open(filename_to_save, "w", encoding='utf-8') as f:
+        f.write(encoded)
+        
+    total_bits = len(encoded)
+    # Считаем среднюю длину для тех символов, которые закодировались
+    cross_avg_len = total_bits / encoded_chars_count if encoded_chars_count > 0 else 0
+            
+    return total_bits, cross_avg_len, missing_chars
 
 # --- Запуск ---
 
@@ -186,18 +192,15 @@ def main():
     files = ["Братья Карамазовы.txt", "Война и мир.txt"]
     results = []
 
-    # Проверка наличия файлов
     for f in files:
         if not os.path.exists(f):
             print(f"ОШИБКА: Файл {f} не найден в папке с программой.")
             return
 
-    # Обрабатываем оба текста
     for file in files:
         results.append(process_text(file))
 
-    # --- Анализ и сравнение (Вывод в консоль) ---
-    
+    # --- Анализ и сравнение ---
     print("\n\n" + "="*50)
     print("АНАЛИЗ РЕЗУЛЬТАТОВ")
     print("="*50)
@@ -208,12 +211,7 @@ def main():
         print(f"  Ср. длина (Равномерный): {res['avg_len_uniform']:.4f} бит")
         print(f"  Ср. длина (Шеннон-Фано): {res['avg_len_sf']:.4f} бит")
         print(f"  Ср. длина (Хаффман):     {res['avg_len_huff']:.4f} бит")
-        
-        # Оценка эффективности
-        best_len = min(res['avg_len_uniform'], res['avg_len_sf'], res['avg_len_huff'])
-        print(f"  Наиболее эффективный код: {'Равномерный' if best_len == res['avg_len_uniform'] else 'Шеннона-Фано' if best_len == res['avg_len_sf'] else 'Хаффмана'}")
 
-    # Сравнение "своими" и "чужими" кодами
     print("\n--- Кодирование 'чужими' кодами ---")
     
     text1 = results[0]['text']
@@ -221,27 +219,38 @@ def main():
     codes1 = results[0]['codes']
     codes2 = results[1]['codes']
 
-    # 1. Кодируем первый текст кодами Хаффмана/Шеннона-Фано второго текста
-    # В задании сказано "кодами ... построенными для второго текста"
-    # Для простоты возьмем код Хаффмана, так как он самый эффективный
-    
+    # 1. Кодируем первый текст кодом Хаффмана второго текста
     print(f"\nКодирование '{results[0]['name']}' кодом Хаффмана от '{results[1]['name']}':")
-    len_cross_1, missing_1 = cross_encode_and_analyze(text1, codes2['huff'], "Huffman Cross", results[0]['name'])
-    print(f"  Длина закодированного текста: {len_cross_1} бит")
-    if missing_1:
-        print(f"  Внимание: {len(missing_1)} символов отсутствовали в чужом алфавите (пропущены).")
+    cross_filename_1 = f"{os.path.splitext(results[0]['name'])[0]}_cross_huffman_from_{os.path.splitext(results[1]['name'])[0]}.txt"
     
+    # Передаем родную среднюю длину Хаффмана первого текста
+    len_cross_1, avg_cross_1, missing_1 = cross_encode_and_analyze(
+        text1, codes2['huff'], results[0]['avg_len_huff'], cross_filename_1
+    )
+    
+    print(f"  Длина закодированного текста: {len_cross_1} бит")
+    print(f"  Ср. длина 'чужого' кода: {avg_cross_1:.4f} бит/символ")
+    print(f"  Ср. длина 'своего' кода (Хаффман): {results[0]['avg_len_huff']:.4f} бит/символ")
+    print(f"  Разница (насколько хуже): +{avg_cross_1 - results[0]['avg_len_huff']:.4f} бит на символ")
+    
+    if missing_1:
+        print(f"  Внимание: {len(missing_1)} уникальных символов отсутствовали (пропущены).")
+    
+    # 2. Кодируем второй текст кодом Хаффмана первого текста
     print(f"\nКодирование '{results[1]['name']}' кодом Хаффмана от '{results[0]['name']}':")
-    len_cross_2, missing_2 = cross_encode_and_analyze(text2, codes1['huff'], "Huffman Cross", results[1]['name'])
+    cross_filename_2 = f"{os.path.splitext(results[1]['name'])[0]}_cross_huffman_from_{os.path.splitext(results[0]['name'])[0]}.txt"
+    
+    len_cross_2, avg_cross_2, missing_2 = cross_encode_and_analyze(
+        text2, codes1['huff'], results[1]['avg_len_huff'], cross_filename_2
+    )
+    
     print(f"  Длина закодированного текста: {len_cross_2} бит")
-    if missing_2:
-        print(f"  Внимание: {len(missing_2)} символов отсутствовали в чужом алфавите (пропущены).")
+    print(f"  Ср. длина 'чужого' кода: {avg_cross_2:.4f} бит/символ")
+    print(f"  Ср. длина 'своего' кода (Хаффман): {results[1]['avg_len_huff']:.4f} бит/символ")
+    print(f"  Разница (насколько хуже): +{avg_cross_2 - results[1]['avg_len_huff']:.4f} бит на символ")
 
-    print("\n--- Вывод ---")
-    print("1. Коды Хаффмана и Шеннона-Фано дают выигрыш по сравнению с равномерным кодом, приближаясь к энтропии.")
-    print("2. Код Хаффмана обычно дает наименьшую среднюю длину (оптимальный префиксный код).")
-    print("3. При кодировании 'чужими' кодами эффективность падает (длина растет), так как частоты символов в разных текстах различаются, и чужой код не оптимален для данного распределения. Кроме того, часть символов может вообще отсутствовать в чужом алфавите.")
-    print("\nФайлы с таблицами кодировок и закодированными текстами сохранены в папке.")
+    if missing_2:
+        print(f"  Внимание: {len(missing_2)} уникальных символов отсутствовали (пропущены).")
 
 if __name__ == "__main__":
     main()
