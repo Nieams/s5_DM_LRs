@@ -2,6 +2,7 @@ import math
 import os
 import heapq
 from collections import Counter
+from itertools import count
 
 # --- Вспомогательные функции ---
 
@@ -82,6 +83,30 @@ def build_huffman_code(frequencies):
             codes[char] = code
     return codes
 
+
+def build_balanced_huffman_code(frequencies):
+    """Строит код Хаффмана со стабильным разрешением одинаковых частот."""
+    sequence = count()
+    heap = [
+        (weight, next(sequence), [[char, ""]])
+        for char, weight in frequencies.items()
+    ]
+    heapq.heapify(heap)
+
+    while len(heap) > 1:
+        lo = heapq.heappop(heap)
+        hi = heapq.heappop(heap)
+        for pair in lo[2]:
+            pair[1] = '0' + pair[1]
+        for pair in hi[2]:
+            pair[1] = '1' + pair[1]
+        heapq.heappush(
+            heap,
+            (lo[0] + hi[0], next(sequence), lo[2] + hi[2]),
+        )
+
+    return {char: code for char, code in heap[0][2]} if heap else {}
+
 # --- Основная логика ---
 
 def process_text(filename):
@@ -151,6 +176,7 @@ def process_text(filename):
         "name": filename,
         "entropy": entropy,
         "char_count": total_chars,
+        "frequencies": frequencies,
         "avg_len_uniform": avg_len_uniform,
         "avg_len_sf": avg_len_sf,
         "avg_len_huff": avg_len_huff,
@@ -163,28 +189,60 @@ def process_text(filename):
         "text": text
     }
 
-def cross_encode_and_analyze(text, foreign_codes, native_avg_len, filename_to_save):
-    """Кодирует текст 'чужими' кодами и сохраняет результат в файл."""
-    encoded = ""
-    missing_chars = set()
-    encoded_chars_count = 0 # Считаем, сколько символов реально закодировали
-    
-    for char in text:
-        if char in foreign_codes:
-            encoded += foreign_codes[char]
-            encoded_chars_count += 1
-        else:
-            missing_chars.add(char)
+def build_cross_huffman_code(text, foreign_frequencies):
+    """Строит код Хаффмана с добавлением отсутствующих символов с частотой 0."""
+    text_alphabet = set(text)
+    cross_frequencies = {
+        char: foreign_frequencies.get(char, 0)
+        for char in sorted(foreign_frequencies.keys() | text_alphabet)
+    }
+    return cross_frequencies, build_balanced_huffman_code(cross_frequencies)
+
+
+def append_cross_codes_to_table(
+    filename, text, foreign_frequencies, foreign_filename
+):
+    """Добавляет в таблицу коды символов, отсутствующих у источника."""
+    cross_frequencies, cross_codes = build_cross_huffman_code(
+        text, foreign_frequencies
+    )
+    missing_chars = sorted(set(text) - foreign_frequencies.keys())
+
+    if not missing_chars:
+        return
+
+    with open(filename, "r", encoding="utf-8") as f:
+        table = f.read().split("\nПерекрёстные коды Хаффмана", 1)[0].rstrip()
+
+    with open(filename, "w", encoding="utf-8") as f:
+        f.write(table + "\n\nПерекрёстные коды Хаффмана\n")
+        f.write(f"Источник кодов: {foreign_filename}\n")
+        f.write(f"{'Символ':<10} | {'Частота':<10} | Хаффман\n")
+        f.write("-" * 45 + "\n")
+        for char in missing_chars:
+            display_char = repr(char)[1:-1] if char in " \n\t" else char
+            f.write(
+                f"{display_char:<10} | {cross_frequencies[char]:<10.6f} | "
+                f"{cross_codes[char]:<15}\n"
+            )
+
+
+def cross_encode_and_analyze(
+    text, foreign_frequencies, filename_to_save
+):
+    """Кодирует текст кодом с чужим алфавитом и частотами."""
+    _, foreign_codes = build_cross_huffman_code(text, foreign_frequencies)
+    encoded = "".join(foreign_codes[char] for char in text)
             
     # Сохраняем файл
     with open(filename_to_save, "w", encoding='utf-8') as f:
         f.write(encoded)
         
     total_bits = len(encoded)
-    # Считаем среднюю длину для тех символов, которые закодировались
-    cross_avg_len = total_bits / encoded_chars_count if encoded_chars_count > 0 else 0
+    # Теперь кодируются все символы исходного текста, включая добавленные с частотой 0.
+    cross_avg_len = total_bits / len(text) if text else 0
             
-    return total_bits, cross_avg_len, missing_chars
+    return total_bits, cross_avg_len
 
 # --- Запуск ---
 
@@ -216,16 +274,20 @@ def main():
     
     text1 = results[0]['text']
     text2 = results[1]['text']
-    codes1 = results[0]['codes']
-    codes2 = results[1]['codes']
 
     # 1. Кодируем первый текст кодом Хаффмана второго текста
     print(f"\nКодирование '{results[0]['name']}' кодом Хаффмана от '{results[1]['name']}':")
     cross_filename_1 = f"{os.path.splitext(results[0]['name'])[0]}_cross_huffman_from_{os.path.splitext(results[1]['name'])[0]}.txt"
     
-    # Передаем родную среднюю длину Хаффмана первого текста
-    len_cross_1, avg_cross_1, missing_1 = cross_encode_and_analyze(
-        text1, codes2['huff'], results[0]['avg_len_huff'], cross_filename_1
+    # Используем частоты второго текста и добавляем отсутствующие символы с частотой 0
+    len_cross_1, avg_cross_1 = cross_encode_and_analyze(
+        text1, results[1]['frequencies'], cross_filename_1
+    )
+    append_cross_codes_to_table(
+        f"{os.path.splitext(results[1]['name'])[0]}_codes.txt",
+        text1,
+        results[1]['frequencies'],
+        results[1]['name'],
     )
     
     print(f"  Длина закодированного текста: {len_cross_1} бит")
@@ -233,24 +295,24 @@ def main():
     print(f"  Ср. длина 'своего' кода (Хаффман): {results[0]['avg_len_huff']:.4f} бит/символ")
     print(f"  Разница (насколько хуже): +{avg_cross_1 - results[0]['avg_len_huff']:.4f} бит на символ")
     
-    if missing_1:
-        print(f"  Внимание: {len(missing_1)} уникальных символов отсутствовали (пропущены).")
-    
     # 2. Кодируем второй текст кодом Хаффмана первого текста
     print(f"\nКодирование '{results[1]['name']}' кодом Хаффмана от '{results[0]['name']}':")
     cross_filename_2 = f"{os.path.splitext(results[1]['name'])[0]}_cross_huffman_from_{os.path.splitext(results[0]['name'])[0]}.txt"
     
-    len_cross_2, avg_cross_2, missing_2 = cross_encode_and_analyze(
-        text2, codes1['huff'], results[1]['avg_len_huff'], cross_filename_2
+    len_cross_2, avg_cross_2 = cross_encode_and_analyze(
+        text2, results[0]['frequencies'], cross_filename_2
+    )
+    append_cross_codes_to_table(
+        f"{os.path.splitext(results[0]['name'])[0]}_codes.txt",
+        text2,
+        results[0]['frequencies'],
+        results[0]['name'],
     )
     
     print(f"  Длина закодированного текста: {len_cross_2} бит")
     print(f"  Ср. длина 'чужого' кода: {avg_cross_2:.4f} бит/символ")
     print(f"  Ср. длина 'своего' кода (Хаффман): {results[1]['avg_len_huff']:.4f} бит/символ")
     print(f"  Разница (насколько хуже): +{avg_cross_2 - results[1]['avg_len_huff']:.4f} бит на символ")
-
-    if missing_2:
-        print(f"  Внимание: {len(missing_2)} уникальных символов отсутствовали (пропущены).")
 
 if __name__ == "__main__":
     main()
